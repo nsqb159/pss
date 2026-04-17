@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>我的砍价活动-拼少少</title>
+    <title>我的砍价活动</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,7 +34,6 @@
         .avatar { width: 40px; height: 40px; background: #ffe0d4; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         .toast-message { position: fixed; bottom: 30%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); color: #ffd966; padding: 12px 24px; border-radius: 60px; font-size: 16px; z-index: 1000; white-space: nowrap; animation: fadeUp 0.25s ease; pointer-events: none; }
         @keyframes fadeUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        /* 弹窗样式 */
         .modal-mask {
             position: fixed;
             top: 0;
@@ -75,6 +74,7 @@
             font-size: 16px;
             line-height: 1.4;
         }
+        .error-box { background: #fff0f0; border: 1px solid #ffcccc; padding: 20px; border-radius: 20px; margin: 20px; text-align: center; color: #d32f2f; }
     </style>
 </head>
 <body>
@@ -85,14 +85,13 @@
         const activityId = urlParams.get('activity_id');
         const userName = decodeURIComponent(urlParams.get('user_name') || '');
         if (!activityId) {
-            document.getElementById('app').innerHTML = '<div style="padding:40px;text-align:center;">无效的活动链接</div>';
+            document.getElementById('app').innerHTML = '<div class="error-box">无效的活动链接</div>';
             return;
         }
         const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let currentActivity, currentProduct, totalCut = 0, remain = 0, isCompleted = false, records = [];
-        let alreadyShownSuccess = false; // 避免重复弹窗
 
         function showModal(message) {
             let modalDiv = document.getElementById('successModal');
@@ -100,22 +99,12 @@
                 modalDiv = document.createElement('div');
                 modalDiv.id = 'successModal';
                 modalDiv.className = 'modal-mask';
-                modalDiv.innerHTML = `
-                    <div class="modal-container">
-                        <span class="modal-close">&times;</span>
-                        <div class="modal-content"></div>
-                    </div>
-                `;
+                modalDiv.innerHTML = `<div class="modal-container"><span class="modal-close">&times;</span><div class="modal-content"></div></div>`;
                 document.body.appendChild(modalDiv);
-                modalDiv.querySelector('.modal-close').addEventListener('click', () => {
-                    modalDiv.classList.remove('show');
-                });
-                modalDiv.addEventListener('click', (e) => {
-                    if (e.target === modalDiv) modalDiv.classList.remove('show');
-                });
+                modalDiv.querySelector('.modal-close').addEventListener('click', () => modalDiv.classList.remove('show'));
+                modalDiv.addEventListener('click', (e) => { if (e.target === modalDiv) modalDiv.classList.remove('show'); });
             }
-            const contentDiv = modalDiv.querySelector('.modal-content');
-            contentDiv.innerText = message;
+            modalDiv.querySelector('.modal-content').innerText = message;
             modalDiv.classList.add('show');
         }
 
@@ -127,17 +116,6 @@
             toast.innerText = msg;
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), duration);
-        }
-
-        function animateCut() {
-            const elem = document.getElementById('cutAmount');
-            if(elem){
-                elem.classList.remove('animate-pulse','animate-shake');
-                void elem.offsetWidth;
-                elem.classList.add('animate-pulse');
-                setTimeout(()=>elem.classList.add('animate-shake'),50);
-                setTimeout(()=>elem.classList.remove('animate-pulse','animate-shake'),600);
-            }
         }
 
         async function loadData() {
@@ -155,15 +133,14 @@
                 remain = Math.max(0, currentProduct.original_price - totalCut);
                 isCompleted = (uniqueUsers.size >= currentActivity.target_people) || (remain <= 0.01);
                 render();
-                // 如果刚刚变成完成状态且未弹窗，则显示成功弹窗
-                if (isCompleted && !alreadyShownSuccess) {
-                    alreadyShownSuccess = true;
+                // 每次进入页面，如果活动已成功，都显示弹窗
+                if (isCompleted) {
                     let successMsg = currentProduct.success_message || '🏆 恭喜！{people}人已到齐，免费拿{product}！🏆';
                     successMsg = successMsg.replace(/\{people\}/g, currentActivity.target_people).replace(/\{product\}/g, currentProduct.name);
                     showModal(successMsg);
                 }
             } catch(e) {
-                document.getElementById('app').innerHTML = `<div style="padding:40px;text-align:center;">加载失败：${e.message}</div>`;
+                document.getElementById('app').innerHTML = `<div class="error-box">加载失败：${e.message}</div>`;
             }
         }
 
@@ -183,11 +160,8 @@
         }
 
         loadData();
-        // 实时订阅砍价记录变化，当砍价完成时触发弹窗
-        supabase.channel(`cuts_${activityId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cuts', filter: `activity_id=eq.${activityId}` }, () => {
-            loadData();
-            animateCut();
-        }).subscribe();
+        // 实时订阅砍价记录变化（当有新砍价时刷新数据，如果刚变成成功状态也会弹窗）
+        supabase.channel(`cuts_${activityId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cuts', filter: `activity_id=eq.${activityId}` }, () => { loadData(); }).subscribe();
     })();
 </script>
 </body>
