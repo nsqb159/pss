@@ -37,81 +37,89 @@
 <body>
 <div class="container" id="app"><div style="text-align:center; padding:40px;">加载中...</div></div>
 <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const activityId = urlParams.get('activity_id');
-    const hostName = decodeURIComponent(urlParams.get('user_name') || '好友');
-    if (!activityId) { document.getElementById('app').innerHTML = '无效链接'; throw new Error(); }
-    const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
-    const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    let currentActivity, currentProduct, totalCut = 0, remain = 0, isCompleted = false, records = [];
-    let userId = localStorage.getItem('knife_user_id');
-    if (!userId) { userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2,8); localStorage.setItem('knife_user_id', userId); }
-    let myNickname = localStorage.getItem('knife_nickname');
-    let myAvatar = localStorage.getItem('knife_avatar');
-    if (!myNickname) {
-        const names = ["热心网友","砍价小能手","锦鲤附体","科技迷","果粉","拼夕夕勇士","隔壁老李","萌妹小葵"];
-        const avatars = ["🐱","🐶","🦊","🐻","🐼","🐨","👧","👦","🧑","💪","🍎"];
-        myNickname = names[Math.floor(Math.random()*names.length)] + Math.floor(Math.random()*100);
-        myAvatar = avatars[Math.floor(Math.random()*avatars.length)];
-        localStorage.setItem('knife_nickname', myNickname);
-        localStorage.setItem('knife_avatar', myAvatar);
-    }
-    function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2000); }
-    function animateCut() { const elem = document.getElementById('cutAmount'); if(elem){ elem.classList.remove('animate-pulse','animate-shake'); void elem.offsetWidth; elem.classList.add('animate-pulse'); setTimeout(()=>elem.classList.add('animate-shake'),50); setTimeout(()=>elem.classList.remove('animate-pulse','animate-shake'),600); } }
-    async function loadData() {
-        const { data: act, error: aErr } = await supabase.from('activities').select('*').eq('id', activityId).single();
-        if (aErr) throw new Error('活动不存在');
-        currentActivity = act;
-        const { data: prod, error: pErr } = await supabase.from('products').select('*').eq('id', act.product_id).single();
-        if (pErr) throw new Error('商品不存在');
-        currentProduct = prod;
-        const { data: cuts } = await supabase.from('cuts').select('*').eq('activity_id', activityId).order('created_at', { ascending: false });
-        records = cuts || [];
-        totalCut = records.reduce((s,r)=>s+r.cut_amount,0);
-        remain = Math.max(0, currentProduct.original_price - totalCut);
-        isCompleted = remain <= 0.01;
-        render();
-    }
-    function render() {
-        const percent = (totalCut / currentProduct.original_price) * 100;
-        let recordsHtml = records.length ? records.map(r => `<li class="record-item"><div class="avatar">${r.avatar||'🔪'}</div><div>${r.nickname}</div><div style="flex:1;text-align:right;">-¥${r.cut_amount.toFixed(2)}</div></li>`).join('') : '<li style="padding:16px;text-align:center;">暂无帮砍记录</li>';
-        document.getElementById('app').innerHTML = `
-            <div class="card"><div class="header"><div class="product-img"><img src="${currentProduct.image_url||'https://picsum.photos/id/20/200/200'}"></div><div class="helper-name">帮 ${hostName} 砍一刀</div><div class="product-title">${currentProduct.name}</div><div class="price-panel"><div>还差 <span class="remain-number">${remain.toFixed(2)}</span> 元</div><div>原价 ¥${currentProduct.original_price.toFixed(2)}</div></div></div>
-            <div class="progress-section"><div class="stats-row"><span>已砍总金额</span><span class="cut-total" id="cutAmount">¥${totalCut.toFixed(2)}</span></div><div class="progress-bar-bg"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>
-            <button class="btn-knife" id="knifeBtn" ${isCompleted ? 'disabled' : ''}>${isCompleted ? '<span>🏆</span><span>已免费拿</span>' : '<span>🔪</span><span>砍一刀</span>'}</button>
-            <div class="card"><div style="padding:16px; font-weight:600;">👥 帮砍记录</div><ul class="records-list">${recordsHtml}</ul></div>
-        `;
-        if (!isCompleted) document.getElementById('knifeBtn').addEventListener('click', performKnife);
-    }
-    function calculateCutAmount() {
-        const remainingPeople = currentActivity.target_people - (currentActivity.current_people || 0);
-        if (remainingPeople <= 0) return 0;
-        const remainingMoney = currentProduct.original_price - totalCut;
-        if (remainingMoney <= 0) return 0;
-        if (remainingPeople === 1) return parseFloat(remainingMoney.toFixed(2));
-        const minLater = (remainingPeople - 1) * 0.01;
-        const maxCut = Math.max(0.01, remainingMoney - minLater);
-        let maxPossible = Math.min(maxCut, remainingMoney * 0.3);
-        if (maxPossible < 0.01) maxPossible = 0.01;
-        let cut = Math.random() * (maxPossible - 0.01) + 0.01;
-        cut = Math.min(cut, remainingMoney - minLater);
-        return parseFloat(cut.toFixed(2));
-    }
-    async function performKnife() {
-        if (isCompleted) return;
-        const btn = document.getElementById('knifeBtn');
-        btn.disabled = true; btn.style.opacity = '0.6';
-        const cut = calculateCutAmount();
-        const { data, error } = await supabase.rpc('add_cut', { p_activity_id: activityId, p_user_id: userId, p_nickname: myNickname, p_avatar: myAvatar, p_cut_amount: cut });
-        if (error) { showToast(error.message.includes('已砍过') ? '您已经砍过啦' : '砍刀失败'); loadData(); btn.disabled=false; btn.style.opacity='1'; return; }
-        await loadData();
-        animateCut();
-        showToast(`🔪 ${myNickname} 帮 ${hostName} 砍了 ¥${data.cut_amount.toFixed(2)}`);
-        if (remain <= 0.01) showToast(`🎉 恭喜！已免费拿！`, 3000);
-        btn.disabled = false; btn.style.opacity = '1';
-    }
-    loadData();
+    (function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const activityId = urlParams.get('activity_id');
+        const hostName = decodeURIComponent(urlParams.get('user_name') || '好友');
+        if (!activityId) {
+            document.getElementById('app').innerHTML = '<div style="padding:40px;text-align:center;">无效的帮砍链接</div>';
+            return;
+        }
+        const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let currentActivity, currentProduct, totalCut = 0, remain = 0, isCompleted = false, records = [];
+        let userId = localStorage.getItem('knife_user_id');
+        if (!userId) { userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2,8); localStorage.setItem('knife_user_id', userId); }
+        let myNickname = localStorage.getItem('knife_nickname');
+        let myAvatar = localStorage.getItem('knife_avatar');
+        if (!myNickname) {
+            const names = ["热心网友","砍价小能手","锦鲤附体","科技迷","果粉","拼夕夕勇士","隔壁老李","萌妹小葵"];
+            const avatars = ["🐱","🐶","🦊","🐻","🐼","🐨","👧","👦","🧑","💪","🍎"];
+            myNickname = names[Math.floor(Math.random()*names.length)] + Math.floor(Math.random()*100);
+            myAvatar = avatars[Math.floor(Math.random()*avatars.length)];
+            localStorage.setItem('knife_nickname', myNickname);
+            localStorage.setItem('knife_avatar', myAvatar);
+        }
+        function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2000); }
+        function animateCut() { const elem = document.getElementById('cutAmount'); if(elem){ elem.classList.remove('animate-pulse','animate-shake'); void elem.offsetWidth; elem.classList.add('animate-pulse'); setTimeout(()=>elem.classList.add('animate-shake'),50); setTimeout(()=>elem.classList.remove('animate-pulse','animate-shake'),600); } }
+        async function loadData() {
+            try {
+                const { data: act, error: aErr } = await supabase.from('activities').select('*').eq('id', activityId).single();
+                if (aErr) throw new Error('活动不存在');
+                currentActivity = act;
+                const { data: prod, error: pErr } = await supabase.from('products').select('*').eq('id', act.product_id).single();
+                if (pErr) throw new Error('商品不存在');
+                currentProduct = prod;
+                const { data: cuts } = await supabase.from('cuts').select('*').eq('activity_id', activityId).order('created_at', { ascending: false });
+                records = cuts || [];
+                totalCut = records.reduce((s,r)=>s+r.cut_amount,0);
+                remain = Math.max(0, currentProduct.original_price - totalCut);
+                isCompleted = remain <= 0.01;
+                render();
+            } catch(e) { document.getElementById('app').innerHTML = `<div style="padding:40px;text-align:center;">加载失败：${e.message}</div>`; }
+        }
+        function render() {
+            const percent = (totalCut / currentProduct.original_price) * 100;
+            let recordsHtml = records.length ? records.map(r => `<li class="record-item"><div class="avatar">${r.avatar||'🔪'}</div><div>${r.nickname}</div><div style="flex:1;text-align:right;">-¥${r.cut_amount.toFixed(2)}</div></li>`).join('') : '<li style="padding:16px;text-align:center;">暂无帮砍记录</li>';
+            document.getElementById('app').innerHTML = `
+                <div class="card"><div class="header"><div class="product-img"><img src="${currentProduct.image_url||'https://picsum.photos/id/20/200/200'}"></div><div class="helper-name">帮 ${escapeHtml(hostName)} 砍一刀</div><div class="product-title">${currentProduct.name}</div><div class="price-panel"><div>还差 <span class="remain-number">${remain.toFixed(2)}</span> 元</div><div>原价 ¥${currentProduct.original_price.toFixed(2)}</div></div></div>
+                <div class="progress-section"><div class="stats-row"><span>已砍总金额</span><span class="cut-total" id="cutAmount">¥${totalCut.toFixed(2)}</span></div><div class="progress-bar-bg"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>
+                <button class="btn-knife" id="knifeBtn" ${isCompleted ? 'disabled' : ''}>${isCompleted ? '<span>🏆</span><span>已免费拿</span>' : '<span>🔪</span><span>砍一刀</span>'}</button>
+                <div class="card"><div style="padding:16px; font-weight:600;">👥 帮砍记录</div><ul class="records-list">${recordsHtml}</ul></div>
+            `;
+            if (!isCompleted) document.getElementById('knifeBtn').addEventListener('click', performKnife);
+        }
+        function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]); }
+        function calculateCutAmount() {
+            const remainingPeople = currentActivity.target_people - (currentActivity.current_people || 0);
+            if (remainingPeople <= 0) return 0;
+            const remainingMoney = currentProduct.original_price - totalCut;
+            if (remainingMoney <= 0) return 0;
+            if (remainingPeople === 1) return parseFloat(remainingMoney.toFixed(2));
+            const minLater = (remainingPeople - 1) * 0.01;
+            const maxCut = Math.max(0.01, remainingMoney - minLater);
+            let maxPossible = Math.min(maxCut, remainingMoney * 0.3);
+            if (maxPossible < 0.01) maxPossible = 0.01;
+            let cut = Math.random() * (maxPossible - 0.01) + 0.01;
+            cut = Math.min(cut, remainingMoney - minLater);
+            return parseFloat(cut.toFixed(2));
+        }
+        async function performKnife() {
+            if (isCompleted) return;
+            const btn = document.getElementById('knifeBtn');
+            btn.disabled = true; btn.style.opacity = '0.6';
+            const cut = calculateCutAmount();
+            const { data, error } = await supabase.rpc('add_cut', { p_activity_id: activityId, p_user_id: userId, p_nickname: myNickname, p_avatar: myAvatar, p_cut_amount: cut });
+            if (error) { showToast(error.message.includes('已砍过') ? '您已经砍过啦' : '砍刀失败'); loadData(); btn.disabled=false; btn.style.opacity='1'; return; }
+            await loadData();
+            animateCut();
+            showToast(`🔪 ${myNickname} 帮 ${hostName} 砍了 ¥${data.cut_amount.toFixed(2)}`);
+            if (remain <= 0.01) showToast(`🎉 恭喜！已免费拿！`, 3000);
+            btn.disabled = false; btn.style.opacity = '1';
+        }
+        loadData();
+    })();
 </script>
 </body>
 </html>
