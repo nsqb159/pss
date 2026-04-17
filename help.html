@@ -54,7 +54,6 @@
         .record-price { font-weight: 800; font-size: 18px; color: #ff4d2e; }
         .toast-message { position: fixed; bottom: 30%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); color: #ffd966; padding: 12px 24px; border-radius: 60px; font-size: 16px; z-index: 1000; white-space: nowrap; animation: fadeUp 0.25s ease; pointer-events: none; }
         @keyframes fadeUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        /* 弹窗 */
         .modal-mask {
             position: fixed;
             top: 0;
@@ -103,7 +102,7 @@
 </head>
 <body>
 <div class="container" id="appRoot">
-    <!-- 内容动态加载 -->
+    <div class="loading-placeholder">加载中...</div>
 </div>
 
 <script>
@@ -116,7 +115,7 @@
         const hostName = decodeURIComponent(urlParams.get('user_name') || '好友');
         
         if (!activityId) {
-            document.getElementById('appRoot').innerHTML = `<div class="error-box"><div>⚠️ 无效的帮砍链接，缺少活动ID</div><button class="retry-btn" onclick="location.href='create.html'">发起新活动</button></div>`;
+            document.getElementById('appRoot').innerHTML = `<div class="error-box"><div>⚠️ 无效的帮砍链接</div><button class="retry-btn" onclick="location.href='create.html'">发起新活动</button></div>`;
             return;
         }
         
@@ -139,6 +138,7 @@
         
         let loadAttempts = 0;
         const MAX_ATTEMPTS = 2;
+        let isKnifing = false; // 防抖锁
         
         function showModal(message) {
             let modalDiv = document.getElementById('successModal');
@@ -208,9 +208,10 @@
             let isCompleted = false;
             let records = [];
             let cuttedAmountSpan = null;
-            let alreadyShownSuccess = false; // 避免重复弹窗
+            let alreadyShownSuccess = false;
+            let userHasKnifed = false; // 当前用户是否已经为这个活动砍过
             
-            function renderUI(remainAmount) {
+            function renderUI(remainAmount, userAlreadyKnifed) {
                 const percent = (totalCut / currentProduct.original_price) * 100;
                 let recordsHtml = records.length ? records.map(r => `
                     <li class="record-item">
@@ -222,6 +223,12 @@
                         <div class="record-price">-¥${r.cut_amount.toFixed(2)}</div>
                     </li>
                 `).join('') : '<li class="loading-placeholder">暂无帮砍记录，快喊好友来砍一刀~</li>';
+                
+                const btnDisabled = isCompleted || userAlreadyKnifed;
+                let btnText = '';
+                if (isCompleted) btnText = '<span>🏆</span><span>已成功免费拿</span>';
+                else if (userAlreadyKnifed) btnText = '<span>🔪</span><span>您已帮砍过</span>';
+                else btnText = '<span>🔪</span><span>砍 一 刀</span>';
                 
                 document.getElementById('appRoot').innerHTML = `
                     <div class="knife-card">
@@ -253,7 +260,7 @@
                             </div>
                         </div>
                         <div class="knife-btn-wrapper">
-                            <button class="knife-btn" id="knifeBtn" ${isCompleted ? 'disabled' : ''}>${isCompleted ? '<span>🏆</span><span>已成功免费拿</span>' : '<span>🔪</span><span>砍 一 刀</span>'}</button>
+                            <button class="knife-btn" id="knifeBtn" ${btnDisabled ? 'disabled' : ''}>${btnText}</button>
                         </div>
                     </div>
                     <div class="records-card">
@@ -265,7 +272,7 @@
                 
                 cuttedAmountSpan = document.getElementById('cuttedAmount');
                 const knifeBtn = document.getElementById('knifeBtn');
-                if (!isCompleted && knifeBtn) {
+                if (!isCompleted && !userAlreadyKnifed && knifeBtn) {
                     knifeBtn.addEventListener('click', performKnife);
                 }
             }
@@ -300,11 +307,9 @@
                     totalCut = records.reduce((sum, r) => sum + r.cut_amount, 0);
                     const remain = Math.max(0, currentProduct.original_price - totalCut);
                     isCompleted = (currentPeopleCount >= currentActivity.target_people) || (remain <= 0.01);
+                    userHasKnifed = records.some(r => r.user_id === userId);
                     
-                    renderUI(remain);
-                    
-                    // 如果活动完成且未弹窗，显示弹窗（注意：帮砍页的弹窗是给帮砍者的，应该在砍刀成功后显示，而不是页面加载时）
-                    // 但为了保险，我们只在砍刀成功时弹窗，不在加载时弹。
+                    renderUI(remain, userHasKnifed);
                 } catch (err) {
                     console.error(err);
                     document.getElementById('appRoot').innerHTML = `<div class="error-box"><div>加载失败：${err.message}</div><button class="retry-btn" onclick="location.reload()">重试</button></div>`;
@@ -312,16 +317,15 @@
             }
             
             async function performKnife() {
-                if (isCompleted) {
-                    showToast('🎉 已经免费拿啦！不能再砍了');
-                    return;
-                }
+                if (isCompleted || userHasKnifed || isKnifing) return;
+                isKnifing = true;
                 const knifeBtn = document.getElementById('knifeBtn');
-                if (!knifeBtn) return;
-                knifeBtn.disabled = true;
-                knifeBtn.style.opacity = '0.6';
+                if (knifeBtn) {
+                    knifeBtn.disabled = true;
+                    knifeBtn.style.opacity = '0.6';
+                }
                 try {
-                    // 重新获取最新数据（防并发）
+                    // 重新获取最新砍价记录（防并发）
                     const { data: latestCuts, error: fetchErr } = await supabase
                         .from('cuts')
                         .select('user_id, cut_amount')
@@ -357,7 +361,7 @@
                     if (error) {
                         console.error('RPC error:', error);
                         const errMsg = error.message || '';
-                        if (errMsg.includes('已砍过') || errMsg.includes('duplicate key')) {
+                        if (errMsg.includes('已砍过') || errMsg.includes('duplicate key') || error.code === '409') {
                             showToast('❌ 您已经砍过啦！每人仅限一刀', 2000);
                         } else if (errMsg.includes('活动已结束')) {
                             showToast('活动已结束，无法再砍', 2000);
@@ -383,24 +387,21 @@
                     const cutAmountShow = (data?.cut_amount || cutValue).toFixed(2);
                     showToast(`🔪 ${myNickname} 帮 ${hostName} 砍了 ¥${cutAmountShow}`, 2000);
                     
-                    // 砍价成功后，判断活动是否完成
                     if (isCompleted && !alreadyShownSuccess) {
                         alreadyShownSuccess = true;
-                        // 帮砍页弹窗内容：谢谢你帮 “发起人名字” 砍价成功获得“商品名称”
                         const thankMsg = `谢谢你帮 “${hostName}” 砍价成功获得 “${currentProduct.name}” 🎉`;
                         showModal(thankMsg);
-                    } else if (!isCompleted) {
-                        // 没有完成，但也可以给个普通提示（已砍）
                     }
                 } catch (err) {
                     console.error('performKnife catch:', err);
                     showToast('网络错误，请重试', 2000);
                 } finally {
+                    isKnifing = false;
                     const btn = document.getElementById('knifeBtn');
                     if (btn) {
                         btn.disabled = false;
                         btn.style.opacity = '1';
-                        if (isCompleted) btn.disabled = true;
+                        if (isCompleted || userHasKnifed) btn.disabled = true;
                     }
                 }
             }
