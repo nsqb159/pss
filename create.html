@@ -58,7 +58,10 @@
 <div class="container">
     <div class="header"><h2>🔪 发起砍一刀</h2><p>选择商品，邀请好友帮砍到0元</p></div>
     <div class="product-swiper">
-        <div class="swiper-container" id="productSwiper"><div class="swiper-wrapper" id="swiperWrapper"><div class="swiper-slide">加载中...</div></div><div class="swiper-pagination" id="swiperPagination"></div></div>
+        <div class="swiper-container" id="productSwiper">
+            <div class="swiper-wrapper" id="swiperWrapper"><div class="swiper-slide">加载中...</div></div>
+            <div class="swiper-pagination" id="swiperPagination"></div>
+        </div>
         <div class="slide-hint" id="slideHint">← 左右滑动查看更多商品 →</div>
     </div>
     <div class="demo-card" id="demoCard" style="display:none;">
@@ -75,19 +78,193 @@
         const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        let products = [], swiper = null, selectedProductId = null, currentProductPrice = 0;
-        let demoInterval = null, demoCutValue = 0, demoTotalPrice = 0;
-        const stories = ["🎉 2026年4月18日 匿名用户 成功砍刀 999大砍刀 免费拿～","🎉 2026年4月18日 匿名用户 成功砍刀 海景大房子 免费拿～","🎉 2026年3月10日 匿名用户 成功砍刀 iPhone 17 Pro Max 免费拿～","🎉 2026年4月15日 匿名用户 成功砍刀 特斯拉 Model Y 免费拿～","🎉 2026年4月12日 匿名用户 成功砍刀 飞天茅台 一箱 免费拿～"];
-        let storyIndex = 0, storyInterval = null;
-        function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
-        function animateCutAmount() { const elem = document.getElementById('demoCutAmount'); if(!elem) return; elem.classList.remove('animate-pulse','animate-shake'); void elem.offsetWidth; elem.classList.add('animate-pulse'); setTimeout(() => elem.classList.add('animate-shake'), 50); setTimeout(() => elem.classList.remove('animate-pulse','animate-shake'), 600); }
-        function startDemoAnimation(price) { if(demoInterval) clearInterval(demoInterval); demoTotalPrice = price; demoCutValue = 0; const cutSpan = document.getElementById('demoCutAmount'); const progressFill = document.getElementById('demoProgressFill'); const demoCard = document.getElementById('demoCard'); if(!cutSpan || !progressFill) return; demoCard.style.display = 'block'; demoInterval = setInterval(() => { if(demoCutValue >= demoTotalPrice) demoCutValue = 0; let increment = Math.random() * 450 + 50; demoCutValue = Math.min(demoCutValue + increment, demoTotalPrice); const percent = (demoCutValue / demoTotalPrice) * 100; cutSpan.innerText = `¥${demoCutValue.toFixed(2)}`; progressFill.style.width = `${percent}%`; animateCutAmount(); if(demoCutValue >= demoTotalPrice) { setTimeout(() => { if(demoCutValue >= demoTotalPrice) { demoCutValue = 0; cutSpan.innerText = `¥0.00`; progressFill.style.width = `0%`; } }, 500); } }, 800); }
-        function startStoryCarousel() { const container = document.getElementById('storyContainer'); if(!container) return; function update() { container.innerHTML = `<div class="marquee-item">${stories[storyIndex]}</div>`; storyIndex = (storyIndex+1)%stories.length; } update(); if(storyInterval) clearInterval(storyInterval); storyInterval = setInterval(update, 3000); }
-        async function loadProducts() { const { data, error } = await supabase.from('products').select('*'); if(error) { document.getElementById('swiperWrapper').innerHTML = '<div class="swiper-slide">加载失败</div>'; return; } products = data; if(!products.length) { document.getElementById('swiperWrapper').innerHTML = '<div class="swiper-slide">暂无商品，请后台添加</div>'; document.getElementById('slideHint').style.display = 'none'; return; } let slidesHtml = ''; for(let p of products) { slidesHtml += `<div class="swiper-slide" data-id="${p.id}"><div class="product-img"><img src="${p.image_url||'https://picsum.photos/id/20/200/200'}" onerror="this.src='https://picsum.photos/id/20/200/200'"></div><div class="product-name">${p.name}</div><div class="product-price">原价 ¥${p.original_price.toFixed(2)}</div></div>`; } document.getElementById('swiperWrapper').innerHTML = slidesHtml; swiper = new Swiper('#productSwiper', { slidesPerView:1, spaceBetween:20, pagination:{el:'.swiper-pagination',clickable:true}, centeredSlides:true, on:{ init:function(){ selectedProductId = products[0].id; currentProductPrice = products[0].original_price; startDemoAnimation(currentProductPrice); updateSlideHint(); }, slideChange:function(){ selectedProductId = products[this.activeIndex].id; currentProductPrice = products[this.activeIndex].original_price; startDemoAnimation(currentProductPrice); updateSlideHint(); } } }); if(products.length===1) document.getElementById('slideHint').innerHTML = '✨ 当前只有一个商品 ✨'; else document.getElementById('slideHint').innerHTML = '← 左右滑动查看更多商品 →'; }
-        function updateSlideHint() { const current = products.find(p=>p.id==selectedProductId); if(current && products.length>1) document.getElementById('slideHint').innerHTML = `当前选中：${current.name}  ← 左右滑动切换 →`; }
-        async function createActivity() { const userName = document.getElementById('userName').value.trim(); if(!userName) { alert('请输入您的昵称'); return; } if(!selectedProductId) { alert('请选择商品'); return; } const product = products.find(p=>p.id==selectedProductId); if(!product) return; const targetPeople = product.default_target_people; const { data, error } = await supabase.from('activities').insert({ product_id: selectedProductId, target_people: targetPeople, current_people:0, total_cut:0, status:'active' }).select().single(); if(error) { alert('创建失败：'+error.message); return; } const viewUrl = `https://nsqb159.github.io/pss/view.html?activity_id=${data.id}&user_name=${encodeURIComponent(userName)}`; window.location.href = viewUrl; }
-        function init() { loadProducts(); startStoryCarousel(); document.getElementById('createBtn').addEventListener('click', createActivity); }
-        if(window.supabase && typeof window.supabase.createClient === 'function') init(); else { const script = document.createElement('script'); script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'; script.onload = init; script.onerror = () => alert('网络错误，请刷新'); document.head.appendChild(script); }
+        
+        let products = [];
+        let swiper = null;
+        let selectedProductId = null;
+        let currentProductPrice = 0;
+        let demoInterval = null;
+        let demoCutValue = 0;
+        let demoTotalPrice = 0;
+        
+        const stories = [
+            "🎉 2026年4月18日 匿名用户 成功砍刀 999大砍刀 免费拿～",
+            "🎉 2026年4月18日 匿名用户 成功砍刀 海景大房子 免费拿～",
+            "🎉 2026年3月10日 匿名用户 成功砍刀 iPhone 17 Pro Max 免费拿～",
+            "🎉 2026年4月15日 匿名用户 成功砍刀 特斯拉 Model Y 免费拿～",
+            "🎉 2026年4月12日 匿名用户 成功砍刀 飞天茅台 一箱 免费拿～"
+        ];
+        let storyIndex = 0;
+        let storyInterval = null;
+        
+        function showToast(msg) {
+            let old = document.querySelector('.toast');
+            if (old) old.remove();
+            let toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        }
+        
+        function animateCutAmount() {
+            const elem = document.getElementById('demoCutAmount');
+            if (!elem) return;
+            elem.classList.remove('animate-pulse', 'animate-shake');
+            void elem.offsetWidth;
+            elem.classList.add('animate-pulse');
+            setTimeout(() => elem.classList.add('animate-shake'), 50);
+            setTimeout(() => elem.classList.remove('animate-pulse', 'animate-shake'), 600);
+        }
+        
+        function startDemoAnimation(price) {
+            if (demoInterval) clearInterval(demoInterval);
+            demoTotalPrice = price;
+            demoCutValue = 0;
+            const cutSpan = document.getElementById('demoCutAmount');
+            const progressFill = document.getElementById('demoProgressFill');
+            const demoCard = document.getElementById('demoCard');
+            if (!cutSpan || !progressFill) return;
+            demoCard.style.display = 'block';
+            demoInterval = setInterval(() => {
+                if (demoCutValue >= demoTotalPrice) {
+                    demoCutValue = 0;
+                }
+                let increment = Math.random() * 450 + 50;
+                demoCutValue = Math.min(demoCutValue + increment, demoTotalPrice);
+                const percent = (demoCutValue / demoTotalPrice) * 100;
+                cutSpan.innerText = `¥${demoCutValue.toFixed(2)}`;
+                progressFill.style.width = `${percent}%`;
+                animateCutAmount();
+                if (demoCutValue >= demoTotalPrice) {
+                    setTimeout(() => {
+                        if (demoCutValue >= demoTotalPrice) {
+                            demoCutValue = 0;
+                            cutSpan.innerText = `¥0.00`;
+                            progressFill.style.width = `0%`;
+                        }
+                    }, 500);
+                }
+            }, 800);
+        }
+        
+        function startStoryCarousel() {
+            const container = document.getElementById('storyContainer');
+            if (!container) return;
+            function update() {
+                container.innerHTML = `<div class="marquee-item">${stories[storyIndex]}</div>`;
+                storyIndex = (storyIndex + 1) % stories.length;
+            }
+            update();
+            if (storyInterval) clearInterval(storyInterval);
+            storyInterval = setInterval(update, 3000);
+        }
+        
+        async function loadProducts() {
+            const { data, error } = await supabase.from('products').select('*');
+            if (error) {
+                document.getElementById('swiperWrapper').innerHTML = '<div class="swiper-slide">加载失败，请刷新</div>';
+                return;
+            }
+            products = data;
+            if (!products.length) {
+                document.getElementById('swiperWrapper').innerHTML = '<div class="swiper-slide">暂无商品，请后台添加</div>';
+                document.getElementById('slideHint').style.display = 'none';
+                return;
+            }
+            let slidesHtml = '';
+            for (let p of products) {
+                slidesHtml += `
+                    <div class="swiper-slide" data-id="${p.id}">
+                        <div class="product-img"><img src="${p.image_url || 'https://picsum.photos/id/20/200/200'}" onerror="this.src='https://picsum.photos/id/20/200/200'"></div>
+                        <div class="product-name">${p.name}</div>
+                        <div class="product-price">原价 ¥${p.original_price.toFixed(2)}</div>
+                    </div>
+                `;
+            }
+            document.getElementById('swiperWrapper').innerHTML = slidesHtml;
+            swiper = new Swiper('#productSwiper', {
+                slidesPerView: 1,
+                spaceBetween: 20,
+                pagination: { el: '.swiper-pagination', clickable: true },
+                centeredSlides: true,
+                on: {
+                    init: function() {
+                        selectedProductId = products[0].id;
+                        currentProductPrice = products[0].original_price;
+                        startDemoAnimation(currentProductPrice);
+                        updateSlideHint();
+                    },
+                    slideChange: function() {
+                        selectedProductId = products[this.activeIndex].id;
+                        currentProductPrice = products[this.activeIndex].original_price;
+                        startDemoAnimation(currentProductPrice);
+                        updateSlideHint();
+                    }
+                }
+            });
+            if (products.length === 1) {
+                document.getElementById('slideHint').innerHTML = '✨ 当前只有一个商品 ✨';
+            } else {
+                document.getElementById('slideHint').innerHTML = '← 左右滑动查看更多商品 →';
+            }
+        }
+        
+        function updateSlideHint() {
+            const current = products.find(p => p.id == selectedProductId);
+            if (current && products.length > 1) {
+                document.getElementById('slideHint').innerHTML = `当前选中：${current.name}  ← 左右滑动切换 →`;
+            }
+        }
+        
+        async function createActivity() {
+            const userName = document.getElementById('userName').value.trim();
+            if (!userName) {
+                alert('请输入您的昵称');
+                return;
+            }
+            if (!selectedProductId) {
+                alert('请选择商品');
+                return;
+            }
+            const product = products.find(p => p.id == selectedProductId);
+            if (!product) return;
+            const targetPeople = product.default_target_people;
+            const { data, error } = await supabase
+                .from('activities')
+                .insert({
+                    product_id: selectedProductId,
+                    target_people: targetPeople,
+                    current_people: 0,
+                    total_cut: 0,
+                    status: 'active',
+                    created_by: userName   // 存储发起人昵称，用于后台显示
+                })
+                .select()
+                .single();
+            if (error) {
+                alert('创建失败：' + error.message);
+                return;
+            }
+            const viewUrl = `https://nsqb159.github.io/pss/view.html?activity_id=${data.id}&user_name=${encodeURIComponent(userName)}`;
+            window.location.href = viewUrl;
+        }
+        
+        function init() {
+            loadProducts();
+            startStoryCarousel();
+            document.getElementById('createBtn').addEventListener('click', createActivity);
+        }
+        
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+            init();
+        } else {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+            script.onload = () => { init(); };
+            script.onerror = () => { alert('网络错误，请刷新页面'); };
+            document.head.appendChild(script);
+        }
     })();
 </script>
 </body>
