@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>发起砍一刀 · 拼多多风格</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"/>
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background: #f5f5f5; font-family: system-ui, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { max-width: 500px; width: 100%; background: white; border-radius: 32px; overflow: hidden; box-shadow: 0 8px 28px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #ff4d4f 0%, #e33e3f 100%); padding: 24px 20px 30px; text-align: center; color: white; }
+        .header h2 { font-size: 28px; margin-bottom: 6px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .product-swiper { margin-top: -20px; padding: 0 20px; position: relative; z-index: 2; }
+        .swiper-container { background: white; border-radius: 28px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); overflow: hidden; }
+        .swiper-slide { padding: 20px; text-align: center; }
+        .product-img { width: 120px; height: 120px; margin: 0 auto 12px; border-radius: 24px; overflow: hidden; background: #f0f0f0; }
+        .product-img img { width: 100%; height: 100%; object-fit: cover; }
+        .product-name { font-size: 20px; font-weight: 700; margin: 8px 0 4px; }
+        .product-price { font-size: 16px; color: #e65c2e; font-weight: 600; }
+        .swiper-pagination { position: relative; margin-top: 12px; bottom: 0; }
+        .swiper-pagination-bullet-active { background: #ff4d4f; }
+        .slide-hint { text-align: center; font-size: 12px; color: #999; margin-top: 8px; }
+        .demo-card { background: white; margin: 16px 20px 0; border-radius: 24px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #ffe1d4; }
+        .demo-title { font-size: 14px; font-weight: 600; color: #666; margin-bottom: 12px; display: flex; justify-content: space-between; }
+        .demo-cut-total { font-size: 26px; font-weight: 800; color: #ff4d4f; background: #fff0e8; padding: 6px 16px; border-radius: 60px; display: inline-block; transition: all 0.2s; }
+        @keyframes moneyPulse {
+            0% { transform: scale(1); background-color: #fff0e8; box-shadow: 0 0 0 0 rgba(255,77,79,0.4); }
+            50% { transform: scale(1.2); background-color: #ff4d4f; color: white; box-shadow: 0 0 0 8px rgba(255,77,79,0.2); }
+            100% { transform: scale(1); background-color: #fff0e8; color: #ff4d4f; box-shadow: 0 0 0 0 rgba(255,77,79,0); }
+        }
+        @keyframes shakeGlow {
+            0% { transform: translateX(0); text-shadow: 0 0 0 red; }
+            25% { transform: translateX(-3px); text-shadow: 0 0 5px #ff4d4f; }
+            50% { transform: translateX(3px); text-shadow: 0 0 12px #ff0000; background: #ffe0d4; }
+            75% { transform: translateX(-2px); text-shadow: 0 0 5px #ff4d4f; }
+            100% { transform: translateX(0); text-shadow: 0 0 0 red; }
+        }
+        .animate-pulse { animation: moneyPulse 0.5s cubic-bezier(0.2,1.2,0.4,1) forwards; }
+        .animate-shake { animation: shakeGlow 0.4s ease-in-out; }
+        .demo-progress-bar { background: #f0f0f0; border-radius: 20px; height: 8px; overflow: hidden; margin-top: 12px; }
+        .demo-progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #ff7e5e, #ff4d4f); transition: width 0.3s; }
+        .demo-tip { font-size: 12px; color: #ff7a45; text-align: center; margin-top: 10px; }
+        .name-input { padding: 20px; }
+        .name-input input { width: 100%; padding: 14px 18px; border: 1px solid #ffe1d4; border-radius: 60px; font-size: 16px; background: #fffaf5; text-align: center; outline: none; }
+        .btn-knife { background: linear-gradient(145deg, #ff4d2e, #e63414); border: none; width: calc(100% - 40px); margin: 0 20px 20px; padding: 18px 0; border-radius: 60px; color: white; font-size: 22px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 12px 24px rgba(230,52,20,0.3); cursor: pointer; transition: 0.15s; }
+        .btn-knife:active { transform: scale(0.96); }
+        .marquee-container { background: #fefaf8; margin: 0 12px 20px; border-radius: 28px; overflow: hidden; padding: 12px; text-align: center; min-height: 70px; display: flex; align-items: center; justify-content: center; }
+        .marquee-item { animation: fadeSlide 3s ease-in-out; font-size: 14px; color: #e65c2e; }
+        @keyframes fadeSlide { 0% { opacity: 0; transform: translateY(10px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-10px); } }
+        .toast { position: fixed; bottom: 30%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #ffd966; padding: 10px 20px; border-radius: 40px; font-size: 14px; z-index: 1000; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header"><h2>🔪 发起砍一刀</h2><p>选择商品，邀请好友帮砍到0元</p></div>
+    <div class="product-swiper">
+        <div class="swiper-container" id="productSwiper"><div class="swiper-wrapper" id="swiperWrapper"><div class="swiper-slide">加载中...</div></div><div class="swiper-pagination" id="swiperPagination"></div></div>
+        <div class="slide-hint" id="slideHint">← 左右滑动查看更多商品 →</div>
+    </div>
+    <div class="demo-card" id="demoCard" style="display:none;">
+        <div class="demo-title"><span>🔥 实时砍价演示</span><span class="demo-cut-total" id="demoCutAmount">¥0.00</span></div>
+        <div class="demo-progress-bar"><div class="demo-progress-fill" id="demoProgressFill" style="width:0%"></div></div>
+        <div class="demo-tip">✨ 每人帮砍随机金额，越砍越少 ✨</div>
+    </div>
+    <div class="name-input"><input type="text" id="userName" placeholder="请输入您的昵称（将显示在帮砍页面）" maxlength="20"></div>
+    <button class="btn-knife" id="createBtn"><span>🔪</span> 生成活动链接</button>
+    <div class="marquee-container" id="storyContainer"><div class="marquee-item">🎉 2026年4月18日 匿名用户 成功砍刀 iPhone 15 Pro Max 免费拿～</div></div>
+</div>
+<script>
+    (function() {
+        const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let products = [], swiper = null, selectedProductId = null, currentProductPrice = 0;
+        let demoInterval = null, demoCutValue = 0, demoTotalPrice = 0;
+        const stories = ["🎉 2026年4月18日 匿名用户 成功砍刀 999大砍刀 免费拿～","🎉 2026年4月18日 匿名用户 成功砍刀 海景大房子 免费拿～","🎉 2026年3月10日 匿名用户 成功砍刀 iPhone 17 Pro Max 免费拿～","🎉 2026年4月15日 匿名用户 成功砍刀 特斯拉 Model Y 免费拿～","🎉 2026年4月12日 匿名用户 成功砍刀 飞天茅台 一箱 免费拿～"];
+        let storyIndex = 0, storyInterval = null;
+        function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
+        function animateCutAmount() { const elem = document.getElementById('demoCutAmount'); if(!elem) return; elem.classList.remove('animate-pulse','animate-shake'); void elem.offsetWidth; elem.classList.add('animate-pulse'); setTimeout(() => elem.classList.add('animate-shake'), 50); setTimeout(() => elem.classList.remove('animate-pulse','animate-shake'), 600); }
+        function startDemoAnimation(price) { if(demoInterval) clearInterval(demoInterval); demoTotalPrice = price; demoCutValue = 0; const cutSpan = document.getElementById('demoCutAmount'); const progressFill = document.getElementById('demoProgressFill'); const demoCard = document.getElementById('demoCard'); if(!cutSpan || !progressFill) return; demoCard.style.display = 'block'; demoInterval = setInterval(() => { if(demoCutValue >= demoTotalPrice) demoCutValue = 0; let increment = Math.random() * 450 + 50; demoCutValue = Math.min(demoCutValue + increment, demoTotalPrice); const percent = (demoCutValue / demoTotalPrice) * 100; cutSpan.innerText = `¥${demoCutValue.toFixed(2)}`; progressFill.style.width = `${percent}%`; animateCutAmount(); if(demoCutValue >= demoTotalPrice) { setTimeout(() => { if(demoCutValue >= demoTotalPrice) { demoCutValue = 0; cutSpan.innerText = `¥0.00`; progressFill.style.width = `0%`; } }, 500); } }, 800); }
+        function startStoryCarousel() { const container = document.getElementById('storyContainer'); if(!container) return; function update() { container.innerHTML = `<div class="marquee-item">${stories[storyIndex]}</div>`; storyIndex = (storyIndex+1)%stories.length; } update(); if(storyInterval) clearInterval(storyInterval); storyInterval = setInterval(update, 3000); }
+        async function loadProducts() { const { data, error } = await supabase.from('products').select('*'); if(error) { document.getElementById('swiperWrapper').innerHTML = '<div class="swiper-slide">加载失败</div>'; return; } products = data; if(!products.length) { document.getElementById('swiperWrapper').innerHTML = '<div class="swiper-slide">暂无商品，请后台添加</div>'; document.getElementById('slideHint').style.display = 'none'; return; } let slidesHtml = ''; for(let p of products) { slidesHtml += `<div class="swiper-slide" data-id="${p.id}"><div class="product-img"><img src="${p.image_url||'https://picsum.photos/id/20/200/200'}" onerror="this.src='https://picsum.photos/id/20/200/200'"></div><div class="product-name">${p.name}</div><div class="product-price">原价 ¥${p.original_price.toFixed(2)}</div></div>`; } document.getElementById('swiperWrapper').innerHTML = slidesHtml; swiper = new Swiper('#productSwiper', { slidesPerView:1, spaceBetween:20, pagination:{el:'.swiper-pagination',clickable:true}, centeredSlides:true, on:{ init:function(){ selectedProductId = products[0].id; currentProductPrice = products[0].original_price; startDemoAnimation(currentProductPrice); updateSlideHint(); }, slideChange:function(){ selectedProductId = products[this.activeIndex].id; currentProductPrice = products[this.activeIndex].original_price; startDemoAnimation(currentProductPrice); updateSlideHint(); } } }); if(products.length===1) document.getElementById('slideHint').innerHTML = '✨ 当前只有一个商品 ✨'; else document.getElementById('slideHint').innerHTML = '← 左右滑动查看更多商品 →'; }
+        function updateSlideHint() { const current = products.find(p=>p.id==selectedProductId); if(current && products.length>1) document.getElementById('slideHint').innerHTML = `当前选中：${current.name}  ← 左右滑动切换 →`; }
+        async function createActivity() { const userName = document.getElementById('userName').value.trim(); if(!userName) { alert('请输入您的昵称'); return; } if(!selectedProductId) { alert('请选择商品'); return; } const product = products.find(p=>p.id==selectedProductId); if(!product) return; const targetPeople = product.default_target_people; const { data, error } = await supabase.from('activities').insert({ product_id: selectedProductId, target_people: targetPeople, current_people:0, total_cut:0, status:'active' }).select().single(); if(error) { alert('创建失败：'+error.message); return; } const viewUrl = `https://nsqb159.github.io/pss/view.html?activity_id=${data.id}&user_name=${encodeURIComponent(userName)}`; window.location.href = viewUrl; }
+        function init() { loadProducts(); startStoryCarousel(); document.getElementById('createBtn').addEventListener('click', createActivity); }
+        if(window.supabase && typeof window.supabase.createClient === 'function') init(); else { const script = document.createElement('script'); script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'; script.onload = init; script.onerror = () => alert('网络错误，请刷新'); document.head.appendChild(script); }
+    })();
+</script>
+</body>
+</html>

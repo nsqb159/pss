@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我的砍价活动</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #f5f5f5; font-family: system-ui, sans-serif; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { max-width: 500px; width: 100%; }
+        .card { background: white; border-radius: 28px; overflow: hidden; margin-bottom: 16px; }
+        .header { background: linear-gradient(135deg, #ff4d4f, #e33e3f); padding: 20px; text-align: center; color: white; }
+        .product-img { width: 80px; height: 80px; margin: 0 auto 12px; border-radius: 20px; overflow: hidden; }
+        .product-img img { width: 100%; height: 100%; object-fit: cover; }
+        .product-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+        .price-panel { background: rgba(0,0,0,0.2); border-radius: 60px; padding: 8px 16px; display: flex; justify-content: space-between; margin-top: 12px; }
+        .remain-number { font-size: 28px; font-weight: 800; }
+        .progress-section { padding: 20px; }
+        .stats-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: 600; }
+        .cut-total { color: #ff4d4f; font-size: 20px; transition: all 0.2s; }
+        @keyframes moneyPulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); background-color: #ff4d4f; color: white; } 100% { transform: scale(1); } }
+        @keyframes shakeGlow { 0% { transform: translateX(0); } 25% { transform: translateX(-3px); } 50% { transform: translateX(3px); } 100% { transform: translateX(0); } }
+        .animate-pulse { animation: moneyPulse 0.5s ease forwards; }
+        .animate-shake { animation: shakeGlow 0.4s ease-in-out; }
+        .progress-bar-bg { background: #f0f0f0; border-radius: 20px; height: 10px; overflow: hidden; }
+        .progress-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #ff7e5e, #ff4d4f); transition: width 0.3s; }
+        .share-area { background: #fefaf8; margin: 12px; border-radius: 28px; padding: 20px; text-align: center; }
+        .share-link-box { background: white; border: 1px solid #ffe1d4; border-radius: 60px; padding: 10px 16px; display: flex; justify-content: space-between; margin-bottom: 12px; }
+        .share-link-box input { flex: 1; border: none; outline: none; background: transparent; font-size: 14px; }
+        .copy-btn { background: #ff4d4f; color: white; border: none; padding: 6px 16px; border-radius: 40px; cursor: pointer; }
+        .records-list { list-style: none; max-height: 300px; overflow-y: auto; }
+        .record-item { display: flex; align-items: center; padding: 12px 16px; gap: 12px; border-bottom: 1px solid #f5e6de; }
+        .avatar { width: 40px; height: 40px; background: #ffe0d4; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .toast { position: fixed; bottom: 30%; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: #ffd966; padding: 10px 20px; border-radius: 40px; z-index: 1000; }
+    </style>
+</head>
+<body>
+<div class="container" id="app"><div style="text-align:center; padding:40px;">加载中...</div></div>
+<script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const activityId = urlParams.get('activity_id');
+    const userName = decodeURIComponent(urlParams.get('user_name') || '');
+    if (!activityId) { document.getElementById('app').innerHTML = '无效链接'; throw new Error(); }
+    const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let currentActivity, currentProduct, totalCut = 0, remain = 0, isCompleted = false, records = [];
+    function showToast(msg) { let t = document.createElement('div'); t.className = 'toast'; t.innerText = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2000); }
+    function animateCut() { const elem = document.getElementById('cutAmount'); if(elem){ elem.classList.remove('animate-pulse','animate-shake'); void elem.offsetWidth; elem.classList.add('animate-pulse'); setTimeout(()=>elem.classList.add('animate-shake'),50); setTimeout(()=>elem.classList.remove('animate-pulse','animate-shake'),600); } }
+    async function loadData() {
+        const { data: act, error: aErr } = await supabase.from('activities').select('*').eq('id', activityId).single();
+        if (aErr) throw new Error('活动不存在');
+        currentActivity = act;
+        const { data: prod, error: pErr } = await supabase.from('products').select('*').eq('id', act.product_id).single();
+        if (pErr) throw new Error('商品不存在');
+        currentProduct = prod;
+        const { data: cuts } = await supabase.from('cuts').select('*').eq('activity_id', activityId).order('created_at', { ascending: false });
+        records = cuts || [];
+        totalCut = records.reduce((s,r)=>s+r.cut_amount,0);
+        remain = Math.max(0, currentProduct.original_price - totalCut);
+        isCompleted = remain <= 0.01;
+        render();
+    }
+    function render() {
+        const percent = (totalCut / currentProduct.original_price) * 100;
+        const shareUrl = `https://nsqb159.github.io/pss/help.html?activity_id=${activityId}&user_name=${encodeURIComponent(userName)}`;
+        const viewUrl = window.location.href;
+        let recordsHtml = records.length ? records.map(r => `<li class="record-item"><div class="avatar">${r.avatar||'🔪'}</div><div>${r.nickname}</div><div style="flex:1;text-align:right;">-¥${r.cut_amount.toFixed(2)}</div></li>`).join('') : '<li style="padding:16px;text-align:center;">暂无帮砍记录</li>';
+        document.getElementById('app').innerHTML = `
+            <div class="card"><div class="header"><div class="product-img"><img src="${currentProduct.image_url||'https://picsum.photos/id/20/200/200'}"></div><div class="product-title">${currentProduct.name}</div><div class="price-panel"><div>还差 <span class="remain-number">${remain.toFixed(2)}</span> 元</div><div>原价 ¥${currentProduct.original_price.toFixed(2)}</div></div></div>
+            <div class="progress-section"><div class="stats-row"><span>已砍总金额</span><span class="cut-total" id="cutAmount">¥${totalCut.toFixed(2)}</span></div><div class="progress-bar-bg"><div class="progress-fill" style="width:${percent}%"></div></div></div></div>
+            <div class="share-area"><div class="share-title">📢 分享给好友帮砍</div><div class="share-link-box"><input type="text" id="shareLink" value="${shareUrl}" readonly><button class="copy-btn" id="copyShare">复制</button></div><div class="share-link-box"><input type="text" value="${viewUrl}" readonly><button class="copy-btn" id="copyView">复制查看链接</button></div><div style="font-size:12px; margin-top:8px;">🔗 请保存好本页面链接，可随时查看进度</div></div>
+            <div class="card"><div style="padding:16px; font-weight:600;">👥 帮砍记录</div><ul class="records-list">${recordsHtml}</ul></div>
+        `;
+        document.getElementById('copyShare')?.addEventListener('click',()=>{ document.getElementById('shareLink').select(); document.execCommand('copy'); showToast('帮砍链接已复制'); });
+        document.getElementById('copyView')?.addEventListener('click',()=>{ navigator.clipboard.writeText(viewUrl); showToast('查看链接已复制'); });
+    }
+    loadData();
+    supabase.channel(`cuts_${activityId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cuts', filter: `activity_id=eq.${activityId}` }, () => { loadData(); animateCut(); }).subscribe();
+</script>
+</body>
+</html>
