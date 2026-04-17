@@ -78,7 +78,7 @@
             document.getElementById('appRoot').innerHTML = `
                 <div class="error-box">
                     <div>⚠️ 无效的帮砍链接，缺少活动ID</div>
-                    <button class="retry-btn" onclick="location.href='create.html'">发起新活动</button>
+                    <button class="retry-btn" onclick="location.href='/nsqb159/pss/edit/main/create.html'">发起新活动</button>
                 </div>
             `;
             return;
@@ -197,7 +197,7 @@
                             <div class="progress-bar-bg"><div class="progress-fill" id="progressFill" style="width:${percent}%"></div></div>
                             <div style="display: flex; justify-content: space-between; margin-top: 10px;">
                                 <span class="tip-text">🔪 每人仅限一刀</span>
-                                <span class="tip-text">✨ 凑满人数免单 ✨</span>
+                                <span class="tip-text">✨ 砍就免单（有几率） ✨</span>
                             </div>
                             <div class="people-hint">
                                 🔪 已有 <span id="currentPeople">${currentPeopleCount}</span> 人帮砍，还需 <span id="needMoney">${remainAmount.toFixed(2)}</span> 元即可免费拿
