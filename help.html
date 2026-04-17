@@ -67,16 +67,13 @@
 
 <script>
     (function() {
-        // ===================== 配置 =====================
         const SUPABASE_URL = 'https://sqhcbwqrpyzglbcclzzj.supabase.co';
         const SUPABASE_ANON_KEY = 'sb_publishable_C0A-S0tnUrJFtwa8D09WMg_dZo9h4hb';
         
-        // 获取URL参数
         const urlParams = new URLSearchParams(window.location.search);
         const activityId = urlParams.get('activity_id');
         const hostName = decodeURIComponent(urlParams.get('user_name') || '好友');
         
-        // 无活动ID时直接显示错误
         if (!activityId) {
             document.getElementById('appRoot').innerHTML = `
                 <div class="error-box">
@@ -87,7 +84,6 @@
             return;
         }
         
-        // 用户标识（每个浏览器唯一）
         let userId = localStorage.getItem('knife_user_id');
         if (!userId) {
             userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
@@ -140,7 +136,6 @@
             setTimeout(() => elem.classList.remove('animate-pulse', 'animate-shake'), 600);
         }
         
-        // 砍价算法
         function calculateCutAmount(currentTotal, currentPeople, targetPeople, originalPrice) {
             const remainingPeople = targetPeople - currentPeople;
             if (remainingPeople <= 0) return 0;
@@ -157,7 +152,6 @@
             return parseFloat(cut.toFixed(2));
         }
         
-        // 核心业务逻辑
         async function startApp(supabase) {
             let currentActivity = null;
             let currentProduct = null;
@@ -165,17 +159,13 @@
             let currentPeopleCount = 0;
             let isCompleted = false;
             let records = [];
+            let cuttedAmountSpan = null;
             
-            // DOM 元素引用（在渲染后获取）
-            let productImg, productNameSpan, originalPriceSpan, remainAmountSpan, cuttedAmountSpan;
-            let progressFill, currentPeopleSpan, needMoneySpan, knifeBtn, recordsList;
-            
-            // 渲染界面
             function renderUI(remainAmount) {
                 const percent = (totalCut / currentProduct.original_price) * 100;
                 let recordsHtml = records.length ? records.map(r => `
                     <li class="record-item">
-                        <div class="avatar">${r.avatar || '🔪'}</div>
+                        <div class="avatar">${escapeHtml(r.avatar || '🔪')}</div>
                         <div class="record-info">
                             <div class="record-name">${escapeHtml(r.nickname)}</div>
                             <div class="record-time">${new Date(r.created_at).toLocaleTimeString()}</div>
@@ -224,26 +214,15 @@
                     <footer>每个用户仅限一刀（声明：仅个人娱乐无商业用途无传播引导）</footer>
                 `;
                 
-                // 重新获取DOM元素
-                productImg = document.getElementById('productImg');
-                productNameSpan = document.getElementById('productName');
-                originalPriceSpan = document.getElementById('originalPrice');
-                remainAmountSpan = document.getElementById('remainAmount');
                 cuttedAmountSpan = document.getElementById('cuttedAmount');
-                progressFill = document.getElementById('progressFill');
-                currentPeopleSpan = document.getElementById('currentPeople');
-                needMoneySpan = document.getElementById('needMoney');
-                knifeBtn = document.getElementById('knifeBtn');
-                recordsList = document.getElementById('recordsList');
-                
-                if (!isCompleted) {
+                const knifeBtn = document.getElementById('knifeBtn');
+                if (!isCompleted && knifeBtn) {
                     knifeBtn.addEventListener('click', performKnife);
                 }
             }
             
             async function loadData() {
                 try {
-                    // 获取活动
                     const { data: act, error: actErr } = await supabase
                         .from('activities')
                         .select('*')
@@ -252,7 +231,6 @@
                     if (actErr) throw new Error('活动不存在');
                     currentActivity = act;
                     
-                    // 获取商品
                     const { data: prod, error: prodErr } = await supabase
                         .from('products')
                         .select('*')
@@ -261,7 +239,6 @@
                     if (prodErr) throw new Error('商品不存在');
                     currentProduct = prod;
                     
-                    // 获取砍价记录
                     const { data: cuts, error: cutsErr } = await supabase
                         .from('cuts')
                         .select('*')
@@ -287,6 +264,8 @@
                     showToast('🎉 已经免费拿啦！不能再砍了');
                     return;
                 }
+                const knifeBtn = document.getElementById('knifeBtn');
+                if (!knifeBtn) return;
                 knifeBtn.disabled = true;
                 knifeBtn.style.opacity = '0.6';
                 try {
@@ -315,7 +294,7 @@
                     if (cutValue <= 0) cutValue = 0.01;
                     if (cutValue > currentProduct.original_price - currentTotal) cutValue = currentProduct.original_price - currentTotal;
                     
-                    const { error: insertErr } = await supabase.rpc('add_cut', {
+                    const { data, error } = await supabase.rpc('add_cut', {
                         p_activity_id: activityId,
                         p_user_id: userId,
                         p_nickname: myNickname,
@@ -323,9 +302,27 @@
                         p_cut_amount: cutValue
                     });
                     
-                    if (insertErr) {
-                        if (insertErr.message.includes('已砍过')) showToast('❌ 您已经砍过啦！每人仅限一刀', 2000);
-                        else showToast('砍刀失败：' + (insertErr.message || '未知错误'), 2000);
+                    // 处理 RPC 错误（包括 409 冲突）
+                    if (error) {
+                        console.error('RPC error:', error);
+                        // 根据错误信息判断业务类型
+                        const errMsg = error.message || '';
+                        if (errMsg.includes('已砍过') || errMsg.includes('duplicate key')) {
+                            showToast('❌ 您已经砍过啦！每人仅限一刀', 2000);
+                        } else if (errMsg.includes('活动已结束')) {
+                            showToast('活动已结束，无法再砍', 2000);
+                        } else if (errMsg.includes('活动不存在')) {
+                            showToast('活动不存在，请检查链接', 2000);
+                        } else {
+                            showToast('砍刀失败：' + errMsg.substring(0, 50), 2000);
+                        }
+                        await loadData();
+                        return;
+                    }
+                    
+                    // 成功返回 data 中包含 cut_amount 和 status
+                    if (data && data.success === false) {
+                        showToast(data.message || '砍刀失败', 2000);
                         await loadData();
                         return;
                     }
@@ -333,7 +330,7 @@
                     const oldTotal = totalCut;
                     await loadData();
                     if (totalCut !== oldTotal && cuttedAmountSpan) animateCutAmount(cuttedAmountSpan);
-                    showToast(`🔪 ${myNickname} 帮 ${hostName} 砍了 ¥${cutValue.toFixed(2)}`, 2000);
+                    showToast(`🔪 ${myNickname} 帮 ${hostName} 砍了 ¥${(data?.cut_amount || cutValue).toFixed(2)}`, 2000);
                     
                     if (isCompleted) {
                         const successMsg = currentProduct.success_message || '🏆 恭喜！{people}人已到齐，免费拿{product}！🏆';
@@ -341,13 +338,14 @@
                         showToast(finalMsg, 4000);
                     }
                 } catch (err) {
-                    console.error(err);
+                    console.error('performKnife catch:', err);
                     showToast('网络错误，请重试', 2000);
                 } finally {
-                    if (knifeBtn) {
-                        knifeBtn.disabled = false;
-                        knifeBtn.style.opacity = '1';
-                        if (isCompleted) knifeBtn.disabled = true;
+                    const btn = document.getElementById('knifeBtn');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        if (isCompleted) btn.disabled = true;
                     }
                 }
             }
@@ -356,9 +354,8 @@
                 return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[m]);
             }
             
-            // 启动数据加载和实时订阅
             await loadData();
-            // 订阅砍价记录变化
+            // 实时订阅砍价记录变化
             supabase.channel(`cuts_${activityId}`)
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'cuts', filter: `activity_id=eq.${activityId}` }, () => {
                     loadData();
@@ -367,7 +364,6 @@
                 .subscribe();
         }
         
-        // 动态加载 SDK
         function loadSDKAndStart() {
             if (window.supabase && typeof window.supabase.createClient === 'function') {
                 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
